@@ -1,0 +1,10 @@
+{
+  "personal": ["fullName", "email", "phone", "dob", "gender", "maritalStatus"],
+  "address_perm": ["aadhar", "building", "street", "city", "state", "district", "country", "pincode", "lat", "lng"],
+  "address_curr": ["building", "street", "city", "state", "district", "country", "pincode"],
+  "emergency_primary": ["name", "phone", "relation"],
+  "employment": ["jobTitle", "role", "termYears", "termMonths", "salary", "casualLeaves", "sickLeaves", "startTime", "endTime", "workingDays", "joiningDate"],
+  "medical": ["bloodGroup"],
+  "education": ["qualification", "institution", "specialization"],
+  "bank": ["holder", "number", "ifsc", "branch"]
+}

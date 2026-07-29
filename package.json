@@ -1,0 +1,32 @@
+{
+   
+  "name": "dbiz-app-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "hostinger:install": "npm install --workspaces=false",
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "build": "node --check index.js",
+    "startup:check": "node --check index.js && node scripts/startup-check.js",
+    "test:rbac": "node test_resolver.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+,
+    "dependencies": {
+        "@supabase/supabase-js": "^2.45.6",
+        "compression": "^1.8.1",
+        "cookie-parser": "^1.4.6",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.5",
+        "express": "^4.21.0",
+        "mathjs": "^15.2.0",
+        "multer": "^2.2.0",
+        "pg": "^8.21.0"
+    },
+    "devDependencies": {
+        "nodemon": "^3.1.7"
+    }
+}
