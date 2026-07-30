@@ -81,7 +81,7 @@ class BillingProvider {
             // Fetch Step Instances for these Executions
             const { data: stepInstances, error: sInstErr } = await supabase
                 .from('workflow_step_instances')
-                .select('id, execution_instance_id, workflow_step_id, status, work_id')
+                .select('id, execution_instance_id, workflow_step_id, status')
                 .in('execution_instance_id', execInstanceIds);
             if (sInstErr) throw sInstErr;
             
