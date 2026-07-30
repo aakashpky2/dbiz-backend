@@ -91,7 +91,7 @@ class BillingProvider {
             // Fetch Works
             const { data: works, error: wErr } = await supabase
                 .from('works')
-                .select('id, work_type_name, client_id, status, review_status')
+                .select('id, work_type_name, client_id, status, workflow_status, completed_at')
                 .in('id', workIds);
             if (wErr) throw wErr;
 
@@ -114,14 +114,13 @@ class BillingProvider {
                 }
                 
                 const client = clients.find(c => c.id === work.client_id) || {};
+                const isLegacyWorkCompleted = work.status === 'COMPLETED' || work.workflow_status === 'COMPLETED' || work.completed_at != null;
                 
                 // --- Workflow-level billing ---
                 const tpl = templates?.find(t => t.id === exec.workflow_template_id);
                 if (tpl && tpl.is_billable) {
-                    if (exec.status !== 'COMPLETED') {
+                    if (exec.status !== 'COMPLETED' || !isLegacyWorkCompleted) {
                         // In progress, skip without heavy logging to avoid noise
-                    } else if (isReviewPending(work.review_status)) {
-                        logDetail(`Pending review (Work): ${work.id}`);
                     } else {
                         const workflowRef = exec.id;
                         if (billedWorkflowRefs.has(workflowRef)) {
@@ -156,13 +155,8 @@ class BillingProvider {
                         if (stepInst.status !== 'COMPLETED') continue;
 
                         const trigger = step.billing_trigger || 'ON_WORK_COMPLETION';
-                        if (trigger === 'ON_WORK_COMPLETION' && work.status !== 'COMPLETED') {
+                        if (trigger === 'ON_WORK_COMPLETION' && !isLegacyWorkCompleted) {
                             logDetail(`Status mismatch: Step completed but Work is not completed (Legacy Work: ${work.id})`);
-                            continue;
-                        }
-
-                        if (trigger === 'ON_WORK_COMPLETION' && isReviewPending(work.review_status)) {
-                            logDetail(`Pending review (Work) for step billing: ${work.id}`);
                             continue;
                         }
 
