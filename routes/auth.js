@@ -46,7 +46,11 @@ const authenticateToken = async (req, res, next) => {
         console.log(`[Auth] Request to ${req.path}`);
         console.log(`[Auth] Cookies present:`, cookieKeys);
         console.log(`[Auth] Auth header exists:`, hasAuthHeader);
-
+        console.log(`[Auth Debug] Raw Authorization Header Length: ${req.headers.authorization?.length || 0}`);
+        if (hasAuthHeader) {
+            console.log(`[Auth Debug] Auth Header Prefix: ${req.headers.authorization.substring(0, 15)}...`);
+        }
+        
         let token = null;
         let tokenSource = null;
 
@@ -94,7 +98,13 @@ const authenticateToken = async (req, res, next) => {
             tokenSource = 'header:authorization';
         }
 
-        console.log(`[Auth] Token source selected:`, tokenSource || 'None');
+        console.log("[Auth] Credential metadata", {
+            tokenSource: tokenSource || "none",
+            tokenExists: Boolean(token),
+            tokenLength: typeof token === "string" ? token.length : 0,
+            authorizationHeaderExists: Boolean(req.headers.authorization),
+            sessionCookieExists: Boolean(req.cookies?.session),
+        });
 
         if (!token) {
             return res.status(401).json({ error: 'Unauthorized: No session token provided' });
@@ -103,21 +113,41 @@ const authenticateToken = async (req, res, next) => {
         const { data: { user }, error } = await supabase.auth.getUser(token);
 
         if (error || !user) {
-            console.error(`[Auth] Token validation failed. Error:`, error?.message);
-            // If the cookie token failed, but we also have an auth header, we might want to try the auth header!
-            if (tokenSource.startsWith('cookie') && hasAuthHeader) {
-                console.log(`[Auth] Cookie token failed, attempting fallback to Auth header...`);
-                const fallbackToken = req.headers.authorization.split(' ')[1];
-                if (fallbackToken && fallbackToken !== token) {
-                    const { data: fallbackData, error: fallbackError } = await supabase.auth.getUser(fallbackToken);
-                    if (!fallbackError && fallbackData?.user) {
-                        console.log(`[Auth] Fallback to Auth header succeeded!`);
-                        req.user = fallbackData.user;
-                        return next();
+            const tokenText = typeof token === "string" ? token : "";
+            const tokenParts = tokenText.split(".");
+
+            console.error("[Auth] Token validation failed", {
+                message: error?.message ?? null,
+                code: error?.code ?? null,
+                status: error?.status ?? null,
+                name: error?.name ?? null,
+
+                tokenExists: Boolean(tokenText),
+                tokenLength: tokenText.length,
+                jwtPartCount: tokenParts.length,
+                looksLikeJwt: tokenParts.length === 3,
+                hasLeadingWhitespace: /^\s/.test(tokenText),
+                hasTrailingWhitespace: /\s$/.test(tokenText),
+                containsBearerPrefix: tokenText.startsWith("Bearer "),
+                selectedTokenSource: tokenSource,
+
+                supabaseUrlHost: (() => {
+                    try {
+                        return new URL(process.env.SUPABASE_URL).hostname;
+                    } catch {
+                        return "INVALID_URL";
                     }
-                }
-            }
-            return res.status(401).json({ error: 'Unauthorized: Invalid session token' });
+                })(),
+
+                supabaseUrlLength: process.env.SUPABASE_URL?.length ?? 0,
+                serviceKeyExists: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+                serviceKeyLength: process.env.SUPABASE_SERVICE_ROLE_KEY?.length ?? 0,
+            });
+
+            return res.status(401).json({
+                error: "Unauthorized",
+                message: "Invalid session token",
+            });
         }
 
         req.user = user;

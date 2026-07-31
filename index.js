@@ -55,6 +55,19 @@ function validateEnv() {
   }
 
   console.log("[Startup] Environment validated");
+
+  console.log("[Supabase Client]", {
+    urlHost: (() => {
+      try {
+        return new URL(process.env.SUPABASE_URL).hostname;
+      } catch {
+        return "INVALID_URL";
+      }
+    })(),
+    serviceRoleKeyExists: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    serviceRoleKeyLength:
+      process.env.SUPABASE_SERVICE_ROLE_KEY?.length ?? 0,
+  });
 }
 
 validateEnv();
