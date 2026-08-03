@@ -28,13 +28,8 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Malformed token' });
         }
 
-<<<<<<< HEAD
         if (!exp) {
             return res.status(401).json({ error: 'Missing expiry in token' });
-=======
-        if (!exp || !Number.isFinite(exp)) {
-            return res.status(401).json({ error: 'Missing or malformed expiry in token' });
->>>>>>> 6d200db (Harden authentication and session handling)
         }
 
         const now = Math.floor(Date.now() / 1000);
@@ -44,17 +39,10 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Token has expired' });
         }
 
-<<<<<<< HEAD
         const maxAgeMs = Math.max(1, remainingSeconds) * 1000;
 
         res.cookie('session', access_token, {
             maxAge: maxAgeMs,
-=======
-        const maxAge = remainingSeconds * 1000;
-        // Set the token as a cookie
-        res.cookie('session', access_token, {
-            maxAge: maxAge,
->>>>>>> 6d200db (Harden authentication and session handling)
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             path: '/',
@@ -122,14 +110,8 @@ const authenticateToken = async (req, res, next) => {
 
         // 3. Fallback to Authorization Bearer header
         if (!token && hasAuthHeader) {
-<<<<<<< HEAD
             if (req.headers.authorization.startsWith('Bearer ')) {
                 token = req.headers.authorization.substring(7).trim();
-=======
-            const authHeaderValue = req.headers.authorization;
-            if (authHeaderValue.startsWith('Bearer ')) {
-                token = authHeaderValue.replace('Bearer ', '').trim();
->>>>>>> 6d200db (Harden authentication and session handling)
                 tokenSource = 'header:authorization';
             }
         }
@@ -141,10 +123,6 @@ const authenticateToken = async (req, res, next) => {
             sessionCookieExists: Boolean(req.cookies?.session),
             authorizationHeaderExists: hasAuthHeader
         });
-
-        if (token && typeof token === 'string') {
-            token = token.trim();
-        }
 
         if (!token) {
             return res.status(401).json({ error: 'Unauthorized: No session token provided' });
