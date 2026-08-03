@@ -25,8 +25,7 @@ process.on('unhandledRejection', (reason, promise) => {
 // Try multiple locations for development, but in production Render uses Dashboard env vars
 const envPaths = [
     path.join(__dirname, '.env'),
-    path.join(__dirname, '../.env'),
-    path.join(__dirname, '../frontend/.env.local')
+    path.join(__dirname, '../.env')
 ];
 
 for (const envPath of envPaths) {
