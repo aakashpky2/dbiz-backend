@@ -119,50 +119,43 @@ const authenticateToken = async (req, res, next) => {
         const supabaseCookieExists = Object.keys(req.cookies || {}).some(k => k.startsWith('sb-') && (k.endsWith('-auth-token.0') || k.endsWith('-auth-token')));
 
         if (!token) {
-            console.log("[Auth] 401 Missing Token", {
+            console.log(JSON.stringify({
+                stage: 'auth-missing-credential',
                 requestId: req.requestId,
                 originalUrl: req.originalUrl,
                 cookieNames: Object.keys(req.cookies || {}),
                 sessionCookieExists: Boolean(req.cookies?.session),
-                authorizationExists: hasAuthHeader,
-                tokenSource: tokenSource || "none",
-                validationStatus: 'failed'
-            });
+                authorizationHeaderExists: hasAuthHeader
+            }));
             return res.status(401).json({ error: 'Unauthorized: No session token provided' });
         }
 
+        console.log(JSON.stringify({
+            stage: 'auth-check',
+            requestId: req.requestId,
+            originalUrl: req.originalUrl,
+            tokenSource: tokenSource || "none",
+            tokenExists: Boolean(token),
+            sessionCookieExists: Boolean(req.cookies?.session),
+            authorizationHeaderExists: hasAuthHeader,
+            validationStarted: true,
+            validationStatus: 'pending'
+        }));
+
         const { data: { user }, error } = await supabase.auth.getUser(token);
 
-        console.log("[Auth] Token validation metadata", {
-            tokenSource: tokenSource || "none",
-            sessionCookieExists: Boolean(req.cookies?.session),
-            supabaseCookieExists: supabaseCookieExists,
-            authorizationExists: hasAuthHeader,
-            selectedCredentialType: tokenSource ? tokenSource.split(':')[0] : 'none',
-            validationStarted: true,
-            validationSucceeded: !error && !!user,
-            validationFailed: !!error || !user
-        });
-
         if (error || !user) {
-            console.error("[Auth] Token validation failed", {
-                message: error?.message ?? null,
-                code: error?.code ?? null,
-                status: error?.status ?? null,
-                name: error?.name ?? null,
-                selectedTokenSource: tokenSource,
-                validationStatus: 'failed'
-            });
-            
-            console.log("[Auth] 401 Invalid Token", {
+            console.log(JSON.stringify({
+                stage: 'auth-check',
                 requestId: req.requestId,
                 originalUrl: req.originalUrl,
-                cookieNames: Object.keys(req.cookies || {}),
-                sessionCookieExists: Boolean(req.cookies?.session),
-                authorizationExists: hasAuthHeader,
                 tokenSource: tokenSource || "none",
+                tokenExists: Boolean(token),
+                sessionCookieExists: Boolean(req.cookies?.session),
+                authorizationHeaderExists: hasAuthHeader,
+                validationStarted: true,
                 validationStatus: 'failed'
-            });
+            }));
 
             return res.status(401).json({
                 error: "Unauthorized",

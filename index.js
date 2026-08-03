@@ -168,10 +168,11 @@ const publicApiPaths = new Set([
 ]);
 
 app.use("/api", (req, res, next) => {
-  req.requestId = req.headers['x-request-id'] || require('crypto').randomUUID();
-  res.setHeader('x-request-id', req.requestId);
+  req.requestId = req.headers['x-dbiz-request-id'] || req.headers['X-DBIZ-Request-ID'] || require('crypto').randomUUID();
+  res.setHeader('X-DBIZ-Request-ID', req.requestId);
 
-  console.log('[Telemetry: Pre-Auth Request]', {
+  console.log(JSON.stringify({
+      stage: 'express-entry',
       requestId: req.requestId,
       method: req.method,
       originalUrl: req.originalUrl,
@@ -183,7 +184,8 @@ app.use("/api", (req, res, next) => {
       cookieNames: Object.keys(req.cookies || {}),
       sessionCookieExists: Boolean(req.cookies?.session),
       authorizationHeaderExists: Boolean(req.headers.authorization),
-  });
+  }));
+
 
   if (publicApiPaths.has(req.path)) {
     return next();
