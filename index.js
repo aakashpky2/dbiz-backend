@@ -109,7 +109,7 @@ const corsOptions = {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID']
 };
 
 app.use(cors(corsOptions));
@@ -168,6 +168,23 @@ const publicApiPaths = new Set([
 ]);
 
 app.use("/api", (req, res, next) => {
+  req.requestId = req.headers['x-request-id'] || require('crypto').randomUUID();
+  res.setHeader('x-request-id', req.requestId);
+
+  console.log('[Telemetry: Pre-Auth Request]', {
+      requestId: req.requestId,
+      method: req.method,
+      originalUrl: req.originalUrl,
+      host: req.headers.host,
+      origin: req.headers.origin || null,
+      referer: req.headers.referer || null,
+      forwardedHost: req.headers['x-forwarded-host'] || null,
+      forwardedProto: req.headers['x-forwarded-proto'] || null,
+      cookieNames: Object.keys(req.cookies || {}),
+      sessionCookieExists: Boolean(req.cookies?.session),
+      authorizationHeaderExists: Boolean(req.headers.authorization),
+  });
+
   if (publicApiPaths.has(req.path)) {
     return next();
   }

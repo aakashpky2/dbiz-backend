@@ -117,11 +117,10 @@ const authenticateToken = async (req, res, next) => {
         }
 
         console.log("[Auth] Credential metadata", {
-            route: req.path,
+            requestId: req.requestId,
             tokenSource: tokenSource || "none",
             tokenExists: Boolean(token),
-            sessionCookieExists: Boolean(req.cookies?.session),
-            authorizationHeaderExists: hasAuthHeader
+            validationStatus: token ? 'extracted' : 'failed'
         });
 
         if (!token) {
