@@ -18,3 +18,11 @@ audit*.js
 scratch*.js
 tmp*.js
 reproduce_500.js
+
+logs/
+.next/
+dist/
+build/
+coverage/
+*.tmp
+*.bak
