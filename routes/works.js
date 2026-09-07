@@ -26,32 +26,15 @@ async function fetchEmployeeContext(req) {
     if (!authUserId) return null;
 
     try {
-        const { data: emp, error: empErr } = await supabase
-            .from('employees')
-            .select('id, full_name, first_name, last_name')
-            .eq('auth_user_id', authUserId)
-            .maybeSingle();
-
-        if (empErr) {
-            console.error('[fetchEmployeeContext] Warning: error querying employees table:', empErr);
-        }
-
-        if (emp) {
-            return {
-                authUserId,
-                employee: {
-                    firstName: emp.first_name || emp.full_name || 'System',
-                    lastName: emp.last_name || ''
-                }
-            };
-        }
-
-        // Safe fallback for authenticated user without employee record (does NOT bypass auth or permission checks)
-        const { data: profile } = await supabase
+        const { data: profile, error: profErr } = await supabase
             .from('user_profiles')
             .select('full_name, email')
             .eq('uid', authUserId)
             .maybeSingle();
+
+        if (profErr) {
+            console.error('[fetchEmployeeContext] Warning querying user_profiles:', profErr);
+        }
 
         const name = profile?.full_name || req.user?.user_metadata?.full_name || req.user?.email || 'System User';
         return {
@@ -72,6 +55,7 @@ async function fetchEmployeeContext(req) {
         };
     }
 }
+
 
 // Helper to validate and derive names from Master Data
 async function validateAndDeriveMasterData(worksArray, requestId) {
@@ -261,7 +245,7 @@ router.post('/', requirePermission('MANAGE_WORKS'), async (req, res) => {
             return res.status(403).json({ success: false, error: 'Unauthorized: No employee context' });
         }
 
-        const authUserId = employeeCtx.authUserId; // The UUID from auth.users
+        const authUserId = employeeCtx.authUserId; // The UUID from auth.users / user_profiles
         const actorName = employeeCtx.employee.firstName + (employeeCtx.employee.lastName ? ` ${employeeCtx.employee.lastName}` : '');
 
         // Map payload to clean DB schema representation
@@ -270,19 +254,50 @@ router.post('/', requirePermission('MANAGE_WORKS'), async (req, res) => {
         // Validate IDs, verify relationships, and inject authoritative master data names
         const validatedWorks = await validateAndDeriveMasterData(mappedWorks, requestId);
 
-        // Execute Transaction via RPC
-        const { data, error } = await supabase.rpc('create_works_with_tracking', {
-            p_works: validatedWorks,
-            p_actor_auth_user_id: authUserId,
-            p_actor_name: actorName
-        });
+        // Prepare insert rows with entered_by and entered_by_name
+        const insertRows = validatedWorks.map(w => ({
+            ...w,
+            entered_by: authUserId,
+            entered_by_name: actorName
+        }));
 
-        if (error) {
-            console.error('[POST /api/works] RPC Error:', { requestId, code: error.code, message: error.message });
+        // Execute direct table insert into public.works
+        const { data: insertedWorks, error: insertError } = await supabase
+            .from('works')
+            .insert(insertRows)
+            .select();
+
+        if (insertError) {
+            console.error('[POST /api/works] Insert Error:', {
+                requestId,
+                code: insertError.code,
+                message: insertError.message,
+                details: insertError.details,
+                hint: insertError.hint
+            });
             return res.status(500).json({ success: false, error: 'Unable to create work' });
         }
 
-        return res.status(201).json({ success: true, data: { works: data } });
+        // Insert audit tracking rows
+        if (insertedWorks && insertedWorks.length > 0) {
+            const trackingEntries = insertedWorks.map(w => ({
+                work_id: w.id,
+                type: 'CREATED',
+                by: actorName,
+                uid: authUserId,
+                at: new Date().toISOString(),
+                status: w.status
+            }));
+            const { error: trackError } = await supabase
+                .from('work_tracking')
+                .insert(trackingEntries);
+
+            if (trackError) {
+                console.warn('[POST /api/works] Work tracking log warning:', trackError);
+            }
+        }
+
+        return res.status(201).json({ success: true, data: { works: insertedWorks } });
 
     } catch (err) {
         console.error('[POST /api/works] Error:', { requestId, message: err.message, status: err.status });
@@ -317,19 +332,51 @@ router.patch('/:id', requirePermission('MANAGE_WORKS'), async (req, res) => {
         // Map frontend fields to db fields if they sent camelCase
         const dbUpdates = mapToDbSchema(updates);
 
-        const { data, error } = await supabase.rpc('update_work_with_tracking', {
-            p_work_id: id,
-            p_updates: dbUpdates,
-            p_actor_auth_user_id: authUserId,
-            p_actor_name: actorName
-        });
+        // Filter out undefined values
+        const filteredUpdates = {};
+        for (const [key, value] of Object.entries(dbUpdates)) {
+            if (value !== undefined) {
+                filteredUpdates[key] = value;
+            }
+        }
 
-        if (error) {
-            console.error('[PATCH /api/works] RPC Error:', { requestId, code: error.code, message: error.message });
+        const { data: updatedWork, error: updateError } = await supabase
+            .from('works')
+            .update(filteredUpdates)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError) {
+            console.error('[PATCH /api/works] Update Error:', {
+                requestId,
+                code: updateError.code,
+                message: updateError.message,
+                details: updateError.details,
+                hint: updateError.hint
+            });
             return res.status(500).json({ success: false, error: 'Unable to update work' });
         }
 
-        return res.status(200).json({ success: true, data: data });
+        // Insert audit tracking row
+        if (updatedWork) {
+            const { error: trackError } = await supabase
+                .from('work_tracking')
+                .insert([{
+                    work_id: updatedWork.id,
+                    type: 'UPDATED',
+                    by: actorName,
+                    uid: authUserId,
+                    at: new Date().toISOString(),
+                    status: updatedWork.status
+                }]);
+
+            if (trackError) {
+                console.warn('[PATCH /api/works] Work tracking update warning:', trackError);
+            }
+        }
+
+        return res.status(200).json({ success: true, data: updatedWork });
 
     } catch (err) {
         console.error('[PATCH /api/works] Error:', { requestId, message: err.message });
