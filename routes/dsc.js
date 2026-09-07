@@ -13,6 +13,13 @@ function cleanUndefined(obj) {
     return obj;
 }
 
+function sanitizeDate(val) {
+    if (!val || val === '' || val === '-' || val === '0') return null;
+    const d = new Date(val);
+    if (isNaN(d.getTime()) || d.getFullYear() <= 1972) return null;
+    return val;
+}
+
 // -------------------------------------------------------------
 // STAGES
 // -------------------------------------------------------------
@@ -141,9 +148,9 @@ router.post('/', requirePermission('MANAGE_DSC'), async (req, res) => {
 
         const dbPayload = cleanUndefined({
             company_name: payload.companyName,
-            issue_date: payload.issueDate,
-            validity_years: payload.validityYears,
-            expiry_date: payload.expiryDate,
+            issue_date: sanitizeDate(payload.issueDate),
+            validity_years: payload.validityYears ? parseInt(payload.validityYears) : 2,
+            expiry_date: sanitizeDate(payload.expiryDate),
             status: payload.status,
             remarks: payload.remarks,
             current_status: payload.currentStatus || 'IN',
@@ -151,9 +158,9 @@ router.post('/', requirePermission('MANAGE_DSC'), async (req, res) => {
             type: payload.type,
             mobile: payload.mobile,
             email: payload.email,
-            pan: payload.pan,
+            pan: payload.pan ? payload.pan.trim().toUpperCase() : null,
             aadhar: payload.aadhar,
-            application_date: payload.applicationDate,
+            application_date: sanitizeDate(payload.applicationDate),
             expected_delivery_days: payload.expectedDeliveryDays,
             current_stage_id: payload.currentStageId,
             stage_history: payload.stageHistory,
@@ -190,9 +197,9 @@ router.put('/:id', requirePermission('MANAGE_DSC'), async (req, res) => {
 
         const dbPayload = cleanUndefined({
             company_name: payload.companyName,
-            issue_date: payload.issueDate,
-            validity_years: payload.validityYears,
-            expiry_date: payload.expiryDate,
+            issue_date: sanitizeDate(payload.issueDate),
+            validity_years: payload.validityYears ? parseInt(payload.validityYears) : 2,
+            expiry_date: sanitizeDate(payload.expiryDate),
             status: payload.status,
             remarks: payload.remarks,
             current_status: payload.currentStatus,
@@ -200,9 +207,9 @@ router.put('/:id', requirePermission('MANAGE_DSC'), async (req, res) => {
             type: payload.type,
             mobile: payload.mobile,
             email: payload.email,
-            pan: payload.pan,
+            pan: payload.pan ? payload.pan.trim().toUpperCase() : null,
             aadhar: payload.aadhar,
-            application_date: payload.applicationDate,
+            application_date: sanitizeDate(payload.applicationDate),
             expected_delivery_days: payload.expectedDeliveryDays,
             current_stage_id: payload.currentStageId,
             stage_history: payload.stageHistory,

@@ -524,23 +524,55 @@ exports.generateTaxInvoice = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Bill must be approved before generating a tax invoice, and cannot be generated twice.' });
         }
 
-        const { data: lastInvoice } = await supabase.from('billing_invoices')
-            .select('tax_invoice_no')
-            .eq('is_tax_invoice', true)
-            .order('tax_invoice_generated_at', { ascending: false, nullsFirst: false })
-            .limit(1);
-        
-        let nextNumber = 1;
-        if (lastInvoice && lastInvoice.length > 0 && lastInvoice[0].tax_invoice_no) {
-            const match = lastInvoice[0].tax_invoice_no.match(/(\d+)$/);
-            if (match) nextNumber = parseInt(match[1], 10) + 1;
+        // Try to allocate from configured Billing Number Series
+        let tax_invoice_no = null;
+        let billing_number_series_id = null;
+
+        const billingSeriesController = require('./billingSeriesController');
+        try {
+            const { data: invFull } = await supabase
+                .from('billing_invoices')
+                .select('*, clients:client_id(constitution_id)')
+                .eq('id', id)
+                .single();
+
+            const context = {
+                business_profile_id: invFull?.business_profile_id,
+                client_id: invFull?.client_id,
+                work_id: invFull?.work_id,
+                constitution_id: invFull?.clients?.constitution_id
+            };
+
+            const allocated = await billingSeriesController.allocateNextNumber(context);
+            if (allocated) {
+                tax_invoice_no = allocated.billing_number;
+                billing_number_series_id = allocated.billing_number_series_id;
+            }
+        } catch (seriesErr) {
+            return res.status(409).json({ success: false, message: seriesErr.message });
         }
-        const tax_invoice_no = `DBIZ/${new Date().getFullYear()}-${(new Date().getFullYear()+1).toString().slice(2)}/${nextNumber.toString().padStart(3, '0')}`;
+
+        // Fallback default generation if no custom series configured
+        if (!tax_invoice_no) {
+            const { data: lastInvoice } = await supabase.from('billing_invoices')
+                .select('tax_invoice_no')
+                .eq('is_tax_invoice', true)
+                .order('tax_invoice_generated_at', { ascending: false, nullsFirst: false })
+                .limit(1);
+            
+            let nextNumber = 1;
+            if (lastInvoice && lastInvoice.length > 0 && lastInvoice[0].tax_invoice_no) {
+                const match = lastInvoice[0].tax_invoice_no.match(/(\d+)$/);
+                if (match) nextNumber = parseInt(match[1], 10) + 1;
+            }
+            tax_invoice_no = `DBIZ/${new Date().getFullYear()}-${(new Date().getFullYear()+1).toString().slice(2)}/${nextNumber.toString().padStart(3, '0')}`;
+        }
 
         const { error } = await supabase.from('billing_invoices').update({
             status: 'invoice_generated',
             is_tax_invoice: true,
             tax_invoice_no,
+            billing_number_series_id,
             tax_invoice_generated_at: new Date().toISOString()
         }).eq('id', id);
 
@@ -557,6 +589,10 @@ exports.addPayment = async (req, res) => {
         const { payment_date, amount, payment_mode, reference_no, notes } = req.body;
         const payAmount = parseFloat(amount);
 
+        if (isNaN(payAmount) || !Number.isFinite(payAmount) || payAmount <= 0) {
+            return res.status(400).json({ success: false, message: 'Payment amount must be a positive number.' });
+        }
+
         const { data: invoice, error: invErr } = await supabase.from('billing_invoices').select('*').eq('id', id).single();
         if (invErr || !invoice) return res.status(404).json({ success: false, message: 'Invoice not found.' });
 
@@ -564,13 +600,18 @@ exports.addPayment = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Payments can only be added to generated tax invoices.' });
         }
 
+        const currentBalance = Math.round((parseFloat(invoice.balance_amount !== undefined && invoice.balance_amount !== null ? invoice.balance_amount : (parseFloat(invoice.grand_total || 0) - parseFloat(invoice.paid_amount || 0))) + Number.EPSILON) * 100) / 100;
+        if (payAmount > currentBalance + 0.001) {
+            return res.status(400).json({ success: false, message: `Payment amount (₹${payAmount}) cannot exceed remaining balance amount (₹${currentBalance}).` });
+        }
+
         const { error: payErr } = await supabase.from('billing_payments').insert([{
             invoice_id: id, payment_date, amount: payAmount, payment_mode, reference_no, notes, created_by: req.user?.id
         }]);
         if (payErr) throw payErr;
 
-        const newPaid = parseFloat(invoice.paid_amount) + payAmount;
-        const newBalance = parseFloat(invoice.grand_total) - newPaid;
+        const newPaid = Math.round((parseFloat(invoice.paid_amount || 0) + payAmount + Number.EPSILON) * 100) / 100;
+        const newBalance = Math.max(0, Math.round((parseFloat(invoice.grand_total) - newPaid + Number.EPSILON) * 100) / 100);
         let newStatus = invoice.status;
         if (newBalance <= 0) newStatus = 'paid';
         else if (newPaid > 0) newStatus = 'partially_paid';
@@ -591,6 +632,15 @@ exports.cancelInvoice = async (req, res) => {
     try {
         const { id } = req.params;
         const { cancellation_reason } = req.body;
+
+        const { data: invoice, error: fetchErr } = await supabase.from('billing_invoices').select('status, paid_amount').eq('id', id).single();
+        if (fetchErr || !invoice) return res.status(404).json({ success: false, message: 'Invoice not found.' });
+        if (invoice.status === 'cancelled') {
+            return res.status(400).json({ success: false, message: 'Invoice is already cancelled.' });
+        }
+        if (invoice.status === 'paid' && parseFloat(invoice.paid_amount || 0) > 0) {
+            return res.status(400).json({ success: false, message: 'Paid invoices cannot be cancelled directly.' });
+        }
 
         const { error } = await supabase.from('billing_invoices').update({
             status: 'cancelled', cancellation_reason, cancelled_at: new Date().toISOString(), cancelled_by: req.user?.id

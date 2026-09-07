@@ -1,7 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const billingController = require('../controllers/billingController');
+const billingSeriesController = require('../controllers/billingSeriesController');
 
+// ==========================================
+// BILLING NUMBER SERIES CONFIGURATION & RESOLUTION
+// ==========================================
+router.get('/series', billingSeriesController.listSeries);
+router.post('/series', billingSeriesController.createSeries);
+router.put('/series/:id', billingSeriesController.updateSeries);
+router.delete('/series/:id', billingSeriesController.deleteSeries);
+router.post('/series/resolve', billingSeriesController.resolveSeries);
+
+// ==========================================
+// BILLING INVOICES & STATS
+// ==========================================
 // GET /api/billing/stats
 router.get('/stats', billingController.getStats);
 
