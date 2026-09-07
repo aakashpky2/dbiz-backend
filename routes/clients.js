@@ -6,6 +6,11 @@ const { normalizeContactsArray, normalizePhoneNumber, parsePhoneNumber } = requi
 
 const { normalizeClientPayload } = require('../utils/normalizeClient');
 
+router.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    next();
+});
+
 // GET /api/clients
 router.get('/', async (req, res) => {
     try {

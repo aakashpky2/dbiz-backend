@@ -3,6 +3,11 @@ const express = require('express');
 const router = express.Router();
 const workflowTemplateController = require('../controllers/workflowTemplateController');
 
+router.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    next();
+});
+
 router.post('/save', workflowTemplateController.saveWorkflow);
 router.get('/', workflowTemplateController.getAllTemplates);
 router.post('/', workflowTemplateController.createTemplate);

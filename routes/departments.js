@@ -3,6 +3,11 @@ const router = express.Router();
 const { requirePermission } = require('../lib/permissions');
 const { supabase } = require('../lib/supabase');
 
+router.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    next();
+});
+
 // --- Departments ---
 
 router.get('/', async (req, res) => {
