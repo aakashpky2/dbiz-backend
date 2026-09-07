@@ -368,9 +368,18 @@ router.get('/:id', async (req, res) => {
                 )
             `)
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
-        if (error) throw error;
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return res.status(404).json({ success: false, error: 'Rate card not found' });
+            }
+            throw error;
+        }
+
+        if (!rateCard) {
+            return res.status(404).json({ success: false, error: 'Rate card not found' });
+        }
 
         // Fetch business profiles manually to avoid missing FK error
         const singleProfileIds = [];
@@ -640,7 +649,11 @@ router.put('/:id', requirePermission('MANAGE_RATE_CARDS'), async (req, res) => {
         resolvedClientIds = resolvedClientIds.filter(id => id && id !== 'all');
         const resolvedClientId = resolvedClientIds.length > 0 ? resolvedClientIds[0] : null;
 
-        const { data: currentCard } = await supabase.from('rate_cards').select('*').eq('id', id).single();
+        const { data: currentCard, error: cardErr } = await supabase.from('rate_cards').select('*').eq('id', id).maybeSingle();
+        if (cardErr && cardErr.code !== 'PGRST116') throw cardErr;
+        if (!currentCard) {
+            return res.status(404).json({ success: false, error: 'Rate card not found' });
+        }
 
         if (currentCard.approval_status === 'draft') {
             // Update directly
@@ -755,8 +768,11 @@ router.post('/:id/items', requirePermission('MANAGE_RATE_CARDS'), async (req, re
         const itemData = req.body;
 
         // Ensure rate card exists
-        const { data: rc, error: rcErr } = await supabase.from('rate_cards').select('approval_status').eq('id', id).single();
-        if (rcErr) throw rcErr;
+        const { data: rc, error: rcErr } = await supabase.from('rate_cards').select('approval_status').eq('id', id).maybeSingle();
+        if (rcErr && rcErr.code !== 'PGRST116') throw rcErr;
+        if (!rc) {
+            return res.status(404).json({ success: false, error: 'Rate card not found' });
+        }
 
         // Check for duplicate work_item_id
         const { data: existing } = await supabase
@@ -849,8 +865,10 @@ router.put('/:id/items/:itemId', requirePermission('MANAGE_RATE_CARDS'), async (
         const uid = req.headers['x-user-id'] || req.body.adminId;
         const itemData = req.body;
 
-        const { data: rc } = await supabase.from('rate_cards').select('approval_status').eq('id', id).single();
-        const { data: currentItem } = await supabase.from('rate_card_items').select('*').eq('id', itemId).single();
+        const { data: rc } = await supabase.from('rate_cards').select('approval_status').eq('id', id).maybeSingle();
+        const { data: currentItem } = await supabase.from('rate_card_items').select('*').eq('id', itemId).maybeSingle();
+        if (!rc) return res.status(404).json({ success: false, error: 'Rate card not found' });
+        if (!currentItem) return res.status(404).json({ success: false, error: 'Item not found' });
 
         // Check for duplicate work_item_id that is NOT this item
         const { data: existing } = await supabase
@@ -943,8 +961,10 @@ router.delete('/:id/items/:itemId', requirePermission('MANAGE_RATE_CARDS'), asyn
         const { id, itemId } = req.params;
         const uid = req.headers['x-user-id'] || req.body.adminId;
 
-        const { data: rc } = await supabase.from('rate_cards').select('approval_status').eq('id', id).single();
-        const { data: currentItem } = await supabase.from('rate_card_items').select('*').eq('id', itemId).single();
+        const { data: rc } = await supabase.from('rate_cards').select('approval_status').eq('id', id).maybeSingle();
+        const { data: currentItem } = await supabase.from('rate_card_items').select('*').eq('id', itemId).maybeSingle();
+        if (!rc) return res.status(404).json({ success: false, error: 'Rate card not found' });
+        if (!currentItem) return res.status(404).json({ success: false, error: 'Item not found' });
 
         if (rc.approval_status === 'draft') {
             await supabase.from('rate_card_items').delete().eq('id', itemId);
@@ -1000,8 +1020,11 @@ router.post('/:id/approve', requirePermission('rate_card.approve'), async (req, 
         const { id } = req.params;
         const uid = req.user?.id || req.body.adminId || req.headers['x-user-id'];
 
-        const { data: rc } = await supabase.from('rate_cards').select('*').eq('id', id).single();
-        if (!rc || rc.approval_status !== 'pending_approval') {
+        const { data: rc } = await supabase.from('rate_cards').select('*').eq('id', id).maybeSingle();
+        if (!rc) {
+            return res.status(404).json({ success: false, error: 'Rate card not found' });
+        }
+        if (rc.approval_status !== 'pending_approval') {
             return res.status(400).json({ success: false, error: 'Rate Card is not pending approval' });
         }
 
@@ -1062,9 +1085,10 @@ router.post('/requests/:requestId/approve', requirePermission('rate_card.approve
             .from('rate_card_item_change_requests')
             .select('*')
             .eq('id', requestId)
-            .single();
+            .maybeSingle();
 
-        if (reqErr || !reqData || reqData.approval_status !== 'pending_approval') {
+        if (reqErr && reqErr.code !== 'PGRST116') throw reqErr;
+        if (!reqData || reqData.approval_status !== 'pending_approval') {
             return res.status(400).json({ success: false, error: 'Invalid or already processed request' });
         }
 
