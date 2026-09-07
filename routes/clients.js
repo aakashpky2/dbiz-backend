@@ -342,23 +342,100 @@ router.put('/:id', requirePermission('MANAGE_CLIENTS'), async (req, res) => {
 });
 
 // DELETE /api/clients/:id
-router.delete('/:id', requirePermission('MANAGE_CLIENTS'), async (req, res) => {
+router.delete('/:id', async (req, res, next) => {
+    // Check either DELETE_CLIENTS or MANAGE_CLIENTS
+    const uid = req.user?.id || req.user?.uid;
+    if (!uid) {
+        return res.status(401).json({ success: false, error: 'Unauthorized: User identity missing' });
+    }
+    const { hasPermission } = require('../lib/permissions');
+    const allowed = (await hasPermission(uid, 'DELETE_CLIENTS')) || (await hasPermission(uid, 'MANAGE_CLIENTS'));
+    if (!allowed) {
+        return res.status(403).json({ success: false, error: 'Permission denied: You do not have permission to delete clients.' });
+    }
+    next();
+}, async (req, res) => {
     try {
         const { id } = req.params;
-        const { error } = await supabase
-            .from('clients')
-            .delete()
-            .eq('id', id);
 
-        if (error) {
-            console.error('[Clients API] Delete error:', error);
-            return res.status(500).json({ success: false, error: error.message });
+        // 1. Check whether client exists
+        const { data: existingClient, error: findError } = await supabase
+            .from('clients')
+            .select('id, client_name, is_deleted')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (findError) throw findError;
+
+        if (!existingClient || existingClient.is_deleted) {
+            return res.status(404).json({ success: false, error: 'Client not found.' });
         }
 
-        res.json({ success: true, message: 'Client deleted successfully.' });
+        // 2. Check foreign key references before deleting
+        // A. Works
+        const { data: linkedWorks, error: worksError } = await supabase
+            .from('works')
+            .select('id')
+            .eq('client_id', id)
+            .limit(1);
+
+        if (worksError) throw worksError;
+        if (linkedWorks && linkedWorks.length > 0) {
+            return res.status(409).json({
+                success: false,
+                error: 'This client cannot be deleted because works are linked to it. Please archive the client or remove/transfer linked works first.'
+            });
+        }
+
+        // B. Proposals
+        const { data: linkedProposals, error: propError } = await supabase
+            .from('proposals')
+            .select('id')
+            .eq('client_id', id)
+            .limit(1);
+
+        if (propError) throw propError;
+        if (linkedProposals && linkedProposals.length > 0) {
+            return res.status(409).json({
+                success: false,
+                error: 'This client cannot be deleted because proposals are linked to it. Please remove or reassign the linked proposals first.'
+            });
+        }
+
+        // C. Queries
+        const { data: linkedQueries, error: qError } = await supabase
+            .from('queries')
+            .select('id')
+            .eq('client_id', id)
+            .limit(1);
+
+        if (qError) throw qError;
+        if (linkedQueries && linkedQueries.length > 0) {
+            return res.status(409).json({
+                success: false,
+                error: 'This client cannot be deleted because queries are linked to it. Please remove or reassign the linked queries first.'
+            });
+        }
+
+        // 3. Mark client as soft deleted to maintain data integrity
+        const { error: deleteError } = await supabase
+            .from('clients')
+            .update({
+                is_deleted: true,
+                deleted_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+
+        if (deleteError) {
+            console.error('[Clients API] Delete error:', deleteError);
+            return res.status(500).json({ success: false, error: 'Failed to delete client from database.' });
+        }
+
+        return res.status(200).json({ success: true, message: 'Client deleted successfully.' });
     } catch (error) {
         console.error('[Clients API] Internal error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: error.message || 'Internal server error while deleting client.' });
     }
 });
 
