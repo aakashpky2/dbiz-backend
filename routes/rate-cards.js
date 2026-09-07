@@ -28,6 +28,7 @@ function normalizeChangeType(type) {
 // Middleware: Ensure user is resolved. Since the global authenticateToken middleware runs first,
 // we just enforce that req.user is populated.
 const resolveUser = (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     if (!req.user) {
         return res.status(401).json({ success: false, error: 'Unauthorized: User not authenticated' });
     }
