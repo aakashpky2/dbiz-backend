@@ -102,7 +102,7 @@ router.get('/:id', async (req, res) => {
             .from('clients')
             .select('*')
             .eq('id', req.params.id)
-            .single();
+            .maybeSingle();
 
         if (error) {
             console.error('[Clients API] Supabase error:', error);
@@ -113,9 +113,17 @@ router.get('/:id', async (req, res) => {
             });
         }
 
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: 'Client not found'
+            });
+        }
+
         res.json({
             success: true,
-            data: data || {}
+            data: data
         });
     } catch (error) {
         console.error('[Clients API] Internal error:', error);

@@ -43,9 +43,12 @@ router.post('/convert/:id', async (req, res) => {
             .from('temporary_clients')
             .select('*')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         if (getError) throw getError;
+        if (!tempClient) {
+            return res.status(404).json({ success: false, error: 'Temporary client not found' });
+        }
 
         // Normalize phone before copying to clients
         const { fullPhone } = parsePhoneNumber(

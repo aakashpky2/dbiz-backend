@@ -22,11 +22,11 @@ class CompanyBrandingService {
                     .select('*')
                     .eq('business_profile_id', businessProfileId)
                     .eq('status', 'active')
-                    .single();
+                    .maybeSingle();
 
                 if (!profileError && profileBranding) {
                     brandingData = profileBranding;
-                } else if (profileError && profileError.code !== 'PGRST116') { // PGRST116 is multiple rows or zero rows error
+                } else if (profileError) {
                     console.error('[CompanyBrandingService] Profile branding fetch error:', profileError);
                 }
             }
@@ -39,11 +39,11 @@ class CompanyBrandingService {
                     .is('business_profile_id', null)
                     .eq('is_default', true)
                     .eq('status', 'active')
-                    .single();
+                    .maybeSingle();
 
                 if (!globalError && globalBranding) {
                     brandingData = globalBranding;
-                } else if (globalError && globalError.code !== 'PGRST116') {
+                } else if (globalError) {
                     console.error('[CompanyBrandingService] Global branding fetch error:', globalError);
                 }
             }

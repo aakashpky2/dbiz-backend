@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
         }
 
         // Process data to return the latest rate and flattened profiles
-        const processedData = data.map(assoc => {
+        const processedData = (data || []).map(assoc => {
             const rates = (assoc.rates || []).sort((a, b) => new Date(b.effective_date).getTime() - new Date(a.effective_date).getTime());
             const activeRate = rates.find(r => new Date(r.effective_date) <= new Date());
 

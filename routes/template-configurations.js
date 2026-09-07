@@ -24,9 +24,12 @@ router.get('/:id', async (req, res) => {
             .from('template_configurations')
             .select('*')
             .eq('id', req.params.id)
-            .single();
+            .maybeSingle();
 
         if (error) throw error;
+        if (!data) {
+            return res.status(404).json({ success: false, error: 'Configuration not found' });
+        }
         res.json({ success: true, data });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });

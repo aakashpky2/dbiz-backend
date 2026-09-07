@@ -624,8 +624,11 @@ router.get('/:id', async (req, res) => {
                 .from('tasks')
                 .select(TASK_SELECT_QUERY)
                 .eq('id', req.params.id)
-                .single();
+                .maybeSingle();
             if (error) throw error;
+            if (!fullTask) {
+                return res.status(404).json({ success: false, error: 'Task not found' });
+            }
             task = fullTask;
         } else {
             const work = entityRes.data;

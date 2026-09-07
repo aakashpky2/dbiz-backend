@@ -19,7 +19,7 @@ router.get('/active', authenticateToken, async (req, res) => {
                 .select('*')
                 .eq('business_profile_id', business_profile_id)
                 .eq('status', 'active')
-                .single();
+                .maybeSingle();
 
             if (!error && data) {
                 brandingData = data;
@@ -34,7 +34,7 @@ router.get('/active', authenticateToken, async (req, res) => {
                 .is('business_profile_id', null)
                 .eq('is_default', true)
                 .eq('status', 'active')
-                .single();
+                .maybeSingle();
 
             if (!error && data) {
                 brandingData = data;

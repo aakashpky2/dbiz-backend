@@ -109,11 +109,15 @@ router.get('/:id', async (req, res) => {
                 )
             `)
             .eq('id', req.params.id)
-            .single();
+            .maybeSingle();
 
         if (error) {
             console.error('[Departments API] Fetch error:', error);
-            return res.status(error.code === 'PGRST116' ? 404 : 500).json({ success: false, error: error.message });
+            return res.status(500).json({ success: false, error: error.message });
+        }
+
+        if (!data) {
+            return res.status(404).json({ success: false, error: 'Department not found' });
         }
 
         const d = data;
@@ -230,11 +234,15 @@ router.get('/categories/:catId', async (req, res) => {
                 )
             `)
             .eq('id', req.params.catId)
-            .single();
+            .maybeSingle();
 
         if (error) {
             console.error('[Departments API] Fetch category error:', error);
-            return res.status(error.code === 'PGRST116' ? 404 : 500).json({ success: false, error: error.message });
+            return res.status(500).json({ success: false, error: error.message });
+        }
+
+        if (!data) {
+            return res.status(404).json({ success: false, error: 'Category not found' });
         }
 
         const c = data;

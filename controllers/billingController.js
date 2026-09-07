@@ -16,7 +16,7 @@ exports.getStats = async (req, res) => {
         let partially_paidBills = 0;
         let paidBills = 0;
 
-        invoices.forEach(inv => {
+        (invoices || []).forEach(inv => {
             totalBills++;
             totalBilledAmount += parseFloat(inv.grand_total || 0);
             totalPendingAmount += parseFloat(inv.balance_amount || 0);
@@ -55,7 +55,7 @@ exports.getInvoices = async (req, res) => {
         `).order('created_at', { ascending: false });
 
         if (error) throw error;
-        res.json({ success: true, data });
+        res.json({ success: true, data: Array.isArray(data) ? data : [] });
     } catch (error) {
         console.error('Error fetching invoices:', error.message);
         res.status(500).json({ success: false, message: error.message });
@@ -113,7 +113,7 @@ exports.getEligibleSteps = async (req, res) => {
 
         if (error) throw error;
         
-        const enriched = await Promise.all(data.map(async (step) => {
+        const enriched = await Promise.all((data || []).map(async (step) => {
             const tmplStepId = step.workflow_step_id || step.template_step_id;
             const { data: tmpl } = await supabase.from('workflow_steps').select('step_name, is_billable').eq('id', tmplStepId).maybeSingle();
             return {
@@ -481,7 +481,7 @@ exports.getInvoice = async (req, res) => {
             tasks:work_id (title),
             items:billing_invoice_items(*),
             payments:billing_payments(*)
-        `).eq('id', id).single();
+        `).eq('id', id).maybeSingle();
 
         if (error) throw error;
         if (!invoice) return res.status(404).json({ success: false, message: 'Invoice not found.' });

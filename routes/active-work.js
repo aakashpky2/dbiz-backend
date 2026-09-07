@@ -144,11 +144,11 @@ router.get('/current', authenticateToken, async (req, res) => {
             .in('status', ['in_progress', 'paused'])
             .order('started_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') {
+        if (error) {
             console.error('[Active Work] Supabase schema/query error in /current:', error);
-            return res.status(200).json({ success: true, data: null, message: 'REAL ERROR', details: error.message });
+            return res.status(500).json({ success: false, message: 'Database error fetching active work', details: error.message });
         }
 
         if (activeWork) {

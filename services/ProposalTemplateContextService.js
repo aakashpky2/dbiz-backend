@@ -8,7 +8,7 @@ class ProposalTemplateContextService {
             .from('proposals')
             .select('*')
             .eq('id', proposalId)
-            .single();
+            .maybeSingle();
 
         if (error || !proposal) {
             throw new Error(`Failed to load proposal details: ${error ? error.message : 'Not found'}`);
@@ -17,20 +17,20 @@ class ProposalTemplateContextService {
         // 2. Safely fetch related data
         let client = null;
         if (proposal.client_id) {
-            const { data: clientData } = await supabase.from('clients').select('*').eq('id', proposal.client_id).single();
+            const { data: clientData } = await supabase.from('clients').select('*').eq('id', proposal.client_id).maybeSingle();
             client = clientData;
         }
 
         let businessProfile = null;
         if (proposal.profile_id || proposal.business_profile_id) {
             const profileId = proposal.profile_id || proposal.business_profile_id;
-            const { data: profileData } = await supabase.from('business_profiles').select('*').eq('id', profileId).single();
+            const { data: profileData } = await supabase.from('business_profiles').select('*').eq('id', profileId).maybeSingle();
             businessProfile = profileData;
         }
 
         let branchName = proposal.branch_name || '';
         if (proposal.branch_id && !branchName) {
-            const { data: branchData } = await supabase.from('branches').select('name').eq('id', proposal.branch_id).single();
+            const { data: branchData } = await supabase.from('branches').select('name').eq('id', proposal.branch_id).maybeSingle();
             if (branchData) branchName = branchData.name;
         }
 

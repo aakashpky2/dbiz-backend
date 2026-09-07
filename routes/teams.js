@@ -127,11 +127,15 @@ router.get('/:id', async (req, res) => {
             .from('teams')
             .select('*')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         if (error) {
             console.error('[Teams API] Fetch error:', error);
-            return res.status(error.code === 'PGRST116' ? 404 : 500).json({ success: false, error: error.message });
+            return res.status(500).json({ success: false, error: error.message });
+        }
+
+        if (!team) {
+            return res.status(404).json({ success: false, error: 'Team not found' });
         }
 
         res.json({

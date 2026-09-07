@@ -23,7 +23,7 @@ router.get('/', async (req, res) => {
             throw error;
         }
 
-        res.json(data);
+        res.json(Array.isArray(data) ? data : []);
     } catch (error) {
         console.error('[Interviews List Catch]:', error.message);
         res.status(500).json({ error: error.message });

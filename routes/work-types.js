@@ -23,7 +23,7 @@ router.get('/', async (req, res) => {
         }
 
         // Map it to standard output as expected by frontend
-        const mappedData = data.map(wt => ({
+        const mappedData = (data || []).map(wt => ({
             id: wt.id,
             name: wt.work_type_name,
             status: wt.status || 'ACTIVE'
@@ -45,11 +45,15 @@ router.get('/:id', async (req, res) => {
             .from('worktype_master')
             .select('*')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         if (error) {
             console.error('[WorkTypes API] Fetch error:', error);
-            return res.status(error.code === 'PGRST116' ? 404 : 500).json({ success: false, error: error.message });
+            return res.status(500).json({ success: false, error: error.message });
+        }
+
+        if (!data) {
+            return res.status(404).json({ success: false, error: 'Work type not found' });
         }
 
         res.json({

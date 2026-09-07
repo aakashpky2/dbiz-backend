@@ -49,7 +49,7 @@ exports.getAllTemplates = async (req, res) => {
         const { data, error } = await query;
 
         if (error) throw error;
-        res.json({ success: true, data });
+        res.json({ success: true, data: Array.isArray(data) ? data : [] });
     } catch (error) {
         console.error('Error fetching all templates:', error.message);
         res.status(500).json({ success: false, message: error.message });
@@ -98,7 +98,7 @@ exports.getClientTemplates = async (req, res) => {
             .order('version', { ascending: false });
 
         if (error) throw error;
-        res.json({ success: true, data });
+        res.json({ success: true, data: Array.isArray(data) ? data : [] });
     } catch (error) {
         console.error('Error fetching client templates:', error.message);
         res.status(500).json({ success: false, message: error.message });

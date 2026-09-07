@@ -195,9 +195,9 @@ async function resolveProposalTemplate(proposal) {
 
     // 2. Look for explicit configuration_id on proposal
     if (proposal.template_configuration_id) {
-        const { data: config } = await supabase.from('template_configurations').select('*').eq('id', proposal.template_configuration_id).single();
+        const { data: config } = await supabase.from('template_configurations').select('*').eq('id', proposal.template_configuration_id).maybeSingle();
         if (config) {
-            const { data: template } = await supabase.from('templates').select('*').eq('id', config.template_id).single();
+            const { data: template } = await supabase.from('templates').select('*').eq('id', config.template_id).maybeSingle();
             if (template) {
                 return { source: 'configuration', template_id: config.template_id, configuration_id: config.id, template_content: template.content, template_name: template.name, mappings: config.mappings || [] };
             }
@@ -217,7 +217,7 @@ async function resolveProposalTemplate(proposal) {
 
     if (!bestConfig) return null;
 
-    const { data: template } = await supabase.from('templates').select('*').eq('id', bestConfig.template_id).single();
+    const { data: template } = await supabase.from('templates').select('*').eq('id', bestConfig.template_id).maybeSingle();
     if (!template) return null;
 
     return {
@@ -306,12 +306,12 @@ router.get('/', async (req, res) => {
 
         res.json({
             success: true,
-            data: await resolveProposalUserNames(data.map(formatProposal)),
+            data: await resolveProposalUserNames((data || []).map(formatProposal)),
             pagination: {
                 total: count || 0,
                 page: parseInt(page),
                 limit: parseInt(limit),
-                totalPages: Math.ceil((count || 0) / limit)
+                totalPages: count ? Math.ceil(count / limit) : 0
             }
         });
     } catch (error) {
@@ -371,16 +371,15 @@ router.get('/:id', async (req, res) => {
             .from('proposals')
             .select('*')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         if (error) {
-            console.error('[Proposals API] Fetch one error (PGRST check):', error);
-            return res.status(error.code === 'PGRST116' ? 404 : 500).json({ error: error.message });
+            console.error('[Proposals API] Fetch one error:', error);
+            return res.status(500).json({ success: false, error: error.message });
         }
 
         if (!data) {
-            console.error('[Proposals API] Fetch one: data is null for ID:', id);
-            return res.status(404).json({ error: 'Proposal not found' });
+            return res.status(404).json({ success: false, error: 'Proposal not found' });
         }
 
         const formatted = formatProposal(data);

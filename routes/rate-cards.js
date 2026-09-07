@@ -118,6 +118,7 @@ router.get('/', async (req, res) => {
             .range(offset, offset + limit - 1);
 
         if (error) throw error;
+        data = Array.isArray(data) ? data : [];
 
         // Fetch business profiles manually to avoid missing FK error
         const allProfileIds = new Set();
@@ -293,7 +294,7 @@ router.get('/requests', requirePermission('rate_card.approve'), async (req, res)
         const { data, error } = await query;
         if (error) throw error;
 
-        res.json({ success: true, data });
+        res.json({ success: true, data: Array.isArray(data) ? data : [] });
     } catch (error) {
         console.error('[RateCard API] Get Requests Error:', error);
         res.status(500).json({ success: false, error: error.message });

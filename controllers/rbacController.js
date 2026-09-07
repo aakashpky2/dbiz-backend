@@ -16,7 +16,7 @@ exports.getTemplates = async (req, res) => {
             `)
             .order('created_at', { ascending: false });
         if (error) throw error;
-        res.json({ status: 'success', data });
+        res.json({ status: 'success', data: data || [] });
     } catch (error) {
         res.status(403).json({ error: error.message });
     }
@@ -33,8 +33,11 @@ exports.getTemplateById = async (req, res) => {
                 child_dependencies:responsibility_template_dependencies!parent_template_id(child_template_id)
             `)
             .eq('id', templateId)
-            .single();
+            .maybeSingle();
         if (error) throw error;
+        if (!data) {
+            return res.status(404).json({ error: 'Template not found' });
+        }
         res.json({ status: 'success', data });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -249,7 +252,7 @@ exports.getRoles = async (req, res) => {
             .select('*')
             .order('name');
         if (error) throw error;
-        res.json({ status: 'success', data });
+        res.json({ status: 'success', data: data || [] });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -261,7 +264,7 @@ exports.getUserRoles = async (req, res) => {
             .from('user_profiles')
             .select('role_ids')
             .eq('uid', req.params.userId)
-            .single();
+            .maybeSingle();
         if (profileErr) throw profileErr;
 
         let roles = [];

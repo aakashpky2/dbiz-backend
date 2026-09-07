@@ -33,7 +33,7 @@ router.get('/stages', requirePermission('VIEW_DSC'), async (req, res) => {
 
         if (error) throw error;
 
-        const stages = data.map(s => ({
+        const stages = (data || []).map(s => ({
             id: s.id,
             name: s.name,
             order: s.order,
@@ -93,7 +93,7 @@ router.get('/', requirePermission('VIEW_DSC'), async (req, res) => {
         const { data, error } = await supabase.from('dscs').select('*');
         if (error) throw error;
 
-        const dscs = data.map(d => ({
+        const dscs = (data || []).map(d => ({
             id: d.id,
             companyName: d.company_name,
             issueDate: d.issue_date,

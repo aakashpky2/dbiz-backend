@@ -41,13 +41,14 @@ router.get('/configurations/default', async (req, res) => {
             .eq('module', module)
             .eq('status', 'active')
             .eq('is_default', true)
-            .single();
+            .maybeSingle();
 
         if (configError) {
-            if (configError.code === 'PGRST116') {
-                return res.status(404).json({ success: false, error: "No default configuration found for this module" });
-            }
             throw configError;
+        }
+
+        if (!configData) {
+            return res.status(404).json({ success: false, error: "No default configuration found for this module" });
         }
 
         if (configData.template_id) {
@@ -55,7 +56,7 @@ router.get('/configurations/default', async (req, res) => {
                 .from('templates')
                 .select('content')
                 .eq('id', configData.template_id)
-                .single();
+                .maybeSingle();
 
             if (!templateError && templateData) {
                 configData.template_content = templateData.content;
@@ -183,9 +184,12 @@ router.get('/:id', async (req, res) => {
             .from('templates')
             .select('*')
             .eq('id', req.params.id)
-            .single();
+            .maybeSingle();
 
         if (error) throw error;
+        if (!data) {
+            return res.status(404).json({ success: false, error: 'Template not found' });
+        }
         
         res.json({ success: true, data });
     } catch (err) {

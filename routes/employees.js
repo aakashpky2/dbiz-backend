@@ -214,12 +214,15 @@ router.get('/:id', async (req, res) => {
                 employee_medical_info(*)
             `)
             .eq('id', req.params.id)
-            .single();
+            .maybeSingle();
 
         if (error) {
             console.error('[Employees GetByID Supabase Error]:', error);
-            if (error.code === 'PGRST116') return res.status(404).json({ success: false, error: 'Employee not found' });
-            throw error;
+            return res.status(500).json({ success: false, error: error.message });
+        }
+
+        if (!data) {
+            return res.status(404).json({ success: false, error: 'Employee not found' });
         }
 
         const permanentAddr = (Array.isArray(data.employee_addresses) ? data.employee_addresses.find(a => a.address_type === 'PERMANENT') : (data.employee_addresses?.address_type === 'PERMANENT' ? data.employee_addresses : null)) || {};
