@@ -561,4 +561,133 @@ router.get('/schema', async (req, res) => {
     }
 });
 
+// Fetch Comprehensive Audit Logs
+router.get('/audit-logs', async (req, res) => {
+    try {
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 25));
+        const offset = (page - 1) * limit;
+        const { action, search, startDate, endDate, entityType } = req.query;
+
+        let query = supabase
+            .from('audit_logs')
+            .select('*', { count: 'exact' })
+            .order('performed_at', { ascending: false, nullsFirst: false });
+
+        if (action && action !== 'ALL') {
+            query = query.ilike('action', `%${action}%`);
+        }
+        if (entityType && entityType !== 'ALL') {
+            query = query.ilike('entity_type', `%${entityType}%`);
+        }
+        if (startDate) {
+            query = query.gte('performed_at', startDate);
+        }
+        if (endDate) {
+            query = query.lte('performed_at', endDate);
+        }
+
+        query = query.range(offset, offset + limit - 1);
+
+        const { data, count, error } = await query;
+        if (error) throw error;
+
+        // Fetch user profiles and employee records for performed_by and targets
+        const uids = new Set();
+        (data || []).forEach(log => {
+            if (log.performed_by) uids.add(log.performed_by);
+            if (log.entity_type === 'USER' && log.entity_id) uids.add(log.entity_id);
+        });
+
+        let userMap = {};
+        if (uids.size > 0) {
+            try {
+                const { data: profiles } = await supabase
+                    .from('user_profiles')
+                    .select('uid, full_name, display_name, email, employee_id, is_owner_super_admin')
+                    .in('uid', Array.from(uids));
+
+                const empIds = new Set();
+                (profiles || []).forEach(p => {
+                    if (p.employee_id) empIds.add(p.employee_id);
+                });
+
+                let empMap = {};
+                if (empIds.size > 0) {
+                    const { data: emps } = await supabase
+                        .from('employees')
+                        .select('id, full_name, email, employee_id_hash')
+                        .in('id', Array.from(empIds));
+                    (emps || []).forEach(e => {
+                        empMap[e.id] = e;
+                    });
+                }
+
+                (profiles || []).forEach(p => {
+                    const linkedEmp = p.employee_id ? empMap[p.employee_id] : null;
+                    const name = p.display_name || p.full_name || linkedEmp?.full_name || (p.email ? p.email.split('@')[0] : 'Admin');
+                    
+                    // Prioritize actual employee ID hash / code, then employee_id, then fallback
+                    let empCode = linkedEmp?.employee_id_hash || (p.employee_id ? `EMP-${String(p.employee_id).slice(0, 6).toUpperCase()}` : null);
+                    if (!empCode) {
+                        empCode = p.is_owner_super_admin ? 'SUPER-ADMIN' : `ADM-${p.uid.slice(0, 6).toUpperCase()}`;
+                    }
+
+                    userMap[p.uid] = {
+                        name,
+                        employee_id: empCode,
+                        email: p.email,
+                        is_admin: Boolean(p.is_owner_super_admin)
+                    };
+                });
+            } catch (pErr) {
+                console.warn('[AuditLogs] User profiles resolution warning:', pErr);
+            }
+        }
+
+        const formattedLogs = (data || []).map(log => {
+            let detailsObj = log.details;
+            if (typeof detailsObj === 'string') {
+                try { detailsObj = JSON.parse(detailsObj); } catch(e) {}
+            }
+
+            const userInfo = userMap[log.performed_by];
+            const actorName = log.performed_by_name || detailsObj?.performed_by_name || userInfo?.name || 'System';
+            const actorEmpId = detailsObj?.employee_id || detailsObj?.employee_code || userInfo?.employee_id || (log.performed_by ? `EMP-${log.performed_by.slice(0, 6).toUpperCase()}` : 'SYSTEM');
+
+            const targetUserInfo = userMap[log.entity_id];
+            const targetName = detailsObj?.target_name || detailsObj?.name || detailsObj?.title || targetUserInfo?.name || log.entity_id || 'System';
+            const targetEmpId = targetUserInfo?.employee_id || null;
+
+            return {
+                id: log.id,
+                action: log.action || 'ACTIVITY',
+                entity_type: log.entity_type || 'SYSTEM',
+                entity_id: log.entity_id,
+                performed_by: log.performed_by,
+                actor_name: actorName,
+                employee_id: actorEmpId,
+                target_name: targetName,
+                target_employee_id: targetEmpId,
+                details: detailsObj,
+                performed_at: log.performed_at || log.created_at || new Date().toISOString()
+            };
+        });
+
+        res.json({
+            success: true,
+            data: formattedLogs,
+            pagination: {
+                total: count || 0,
+                page,
+                limit,
+                totalPages: Math.ceil((count || 0) / limit)
+            }
+        });
+    } catch (err) {
+        console.error('Audit logs fetch error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 module.exports = router;

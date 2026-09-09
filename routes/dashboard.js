@@ -362,9 +362,9 @@ router.get('/summary', async (req, res) => {
                 clientsRes, proposalsRes, worksRes, auditRes, dscRes, empRes, attRes
             ] = await Promise.all([
                 safeQuery(supabase.from('clients').select('id', { count: 'exact', head: true }), 'clients'),
-                safeQuery(supabase.from('proposals').select('status, total_amount, created_at'), 'proposals'),
+                safeQuery(supabase.from('proposals').select('id, proposal_number, title, status, total_amount, created_at'), 'proposals'),
                 safeQuery(supabase.from('works').select('status, created_at'), 'works'),
-                safeQuery(supabase.from('audit_logs').select('id, action, entity_id, details, performed_at').order('performed_at', { ascending: false }).limit(10), 'audit_logs'),
+                safeQuery(supabase.from('audit_logs').select('id, action, entity_id, entity_type, performed_by, details, performed_at').order('performed_at', { ascending: false }).limit(10), 'audit_logs'),
                 safeQuery(supabase.from('dsc_tokens').select('id, valid_till'), 'dsc_tokens'),
                 safeQuery(supabase.from('employees').select('id, is_active'), 'employees'),
                 safeQuery(supabase.from('attendance').select('user_id, type').gte('timestamp', startOfDay).lte('timestamp', endOfDay), 'attendance')
@@ -456,15 +456,68 @@ router.get('/summary', async (req, res) => {
                 ]
             };
             
+            // Resolve performer names and employee IDs for recent activities
+            const actorUids = Array.from(new Set(auditLogs.map(l => l.performed_by).filter(Boolean)));
+            let userMap = {};
+            if (actorUids.length > 0) {
+                try {
+                    const { data: profiles } = await supabase
+                        .from('user_profiles')
+                        .select('uid, full_name, display_name, email, employee_id, is_owner_super_admin')
+                        .in('uid', actorUids);
+
+                    const empIds = Array.from(new Set((profiles || []).map(p => p.employee_id).filter(Boolean)));
+                    let empMap = {};
+                    if (empIds.length > 0) {
+                        const { data: emps } = await supabase
+                            .from('employees')
+                            .select('id, full_name, employee_id_hash')
+                            .in('id', empIds);
+                        (emps || []).forEach(e => { empMap[e.id] = e; });
+                    }
+
+                    (profiles || []).forEach(p => {
+                        const linkedEmp = p.employee_id ? empMap[p.employee_id] : null;
+                        const name = p.display_name || p.full_name || linkedEmp?.full_name || (p.email ? p.email.split('@')[0] : 'Admin');
+                        let empCode = linkedEmp?.employee_id_hash || (p.employee_id ? `EMP-${String(p.employee_id).slice(0, 6).toUpperCase()}` : null);
+                        if (!empCode) {
+                            empCode = p.is_owner_super_admin ? 'SUPER-ADMIN' : `ADM-${p.uid.slice(0, 6).toUpperCase()}`;
+                        }
+                        userMap[p.uid] = { name, employee_id: empCode };
+                    });
+                } catch(e) {}
+            }
+
             responseData.tables = {
-                pending_approvals: proposals.filter(p => p.status === 'Pending Approval' || p.status?.toLowerCase().includes('pending')).slice(0, 5),
-                recent_activities: auditLogs.map(log => ({
-                    id: log.id,
-                    action: log.action || 'Action',
-                    target: log.details?.target_name || log.entity_id || 'Unknown',
-                    by: log.details?.performed_by_name || 'System',
-                    time: log.performed_at
-                }))
+                pending_approvals: proposals
+                    .filter(p => p.status === 'Pending Approval' || p.status === 'Pending' || p.status?.toLowerCase().includes('pending'))
+                    .slice(0, 6)
+                    .map(p => ({
+                        id: p.id,
+                        proposal_number: p.proposal_number || `PROP-${String(p.id).slice(0, 6)}`,
+                        title: p.title || 'Client Proposal',
+                        total_amount: Number(p.total_amount) || 0,
+                        status: p.status || 'Pending',
+                        created_at: p.created_at
+                    })),
+                recent_activities: auditLogs.map(log => {
+                    let detailsObj = log.details;
+                    if (typeof detailsObj === 'string') {
+                        try { detailsObj = JSON.parse(detailsObj); } catch(e) {}
+                    }
+                    const userInfo = userMap[log.performed_by];
+                    const actorName = log.performed_by_name || detailsObj?.performed_by_name || userInfo?.name || 'System';
+                    const actorEmpId = detailsObj?.employee_id || detailsObj?.employee_code || userInfo?.employee_id || (log.performed_by ? `EMP-${log.performed_by.slice(0, 6).toUpperCase()}` : 'SYSTEM');
+
+                    return {
+                        id: log.id,
+                        action: log.action || 'Event',
+                        target: detailsObj?.target_name || detailsObj?.name || detailsObj?.title || detailsObj?.client_name || log.entity_id || 'System Record',
+                        by: actorName,
+                        employee_id: actorEmpId,
+                        time: log.performed_at
+                    };
+                })
             };
 
         } else if (profile === 'hr') {
